@@ -1,12 +1,14 @@
-use std::fmt::Display;
+use std::fmt::{Debug, Display};
+use std::str::FromStr;
 
 use dioxus::prelude::*;
 use dioxus_router::prelude::use_navigator;
 use gloo_storage::Storage;
+use midir::MidiOutput;
 
 use crate::components::data::{use_persistent, AppData, Preset};
 use crate::midi::control_change::ControlChange;
-use crate::midi::midi_message::{send_midi_messages, MidiMessage};
+use crate::midi::midi_message::{get_available_ports, send_midi_messages, MidiMessage};
 use crate::midi::program_change::ProgramChange;
 use crate::Route;
 
@@ -21,10 +23,25 @@ pub fn PresetView(cx: Scope, id: usize) -> Element {
     let colour: &UseState<String> = use_state(cx, || preset.card_colour.to_string());
     let nav = use_navigator(cx);
 
+    let midi_out = MidiOutput::new("My MIDI Output").unwrap();
+    let ports = get_available_ports();
+    let current_port = use_state(cx, || preset.device_index);
+
     cx.render(rsx!(
         div { class: "container bg-slate-50 mx-auto px-2 pt-2 text-sm",
             div {
-                div { class: "flex",
+                div {class: "flex",
+                    Button{
+                        styling: "",
+                        text: "Back to Dashboard",
+                        icon: "fas fa-rotate-back",
+                        on_click: move |_| {
+                            nav.push(Route::DashboardView {});
+                        }
+                    }
+
+                }
+                div { class: "flex mt-2",
                     PresetLabel {
                         value: label,
                         on_change: move |e: String| {
@@ -39,8 +56,25 @@ pub fn PresetView(cx: Scope, id: usize) -> Element {
                             colour.set(e);
                         }
                     }
+                    LabeledNumberView {
+                        values: ports
+                            .iter()
+                            .enumerate()
+                            .map(|(i, p)| NumberLabel {
+                                label: midi_out.port_name(p).unwrap_or_else(|_| "Unknown".to_string()),
+                                value: i,
+                            })
+                            .collect(),
+                        label: "Device Index".to_string(),
+                        current_value: *current_port.get(),
+                        on_change: move |i: usize| {
+                            current_port.set(i);
+                        }
+                    }
+                }
+                div { class: "flex mt-2",
                     Button {
-                        styling: "flex-1 p-2 rounded-l-md rounded-r-none border-l-2 border-y-2 border-r-0",
+                        styling: "flex-1 py-4 rounded-l-md rounded-r-none border-l-2 border-y-2 border-r-0",
                         text: "Save Preset",
                         icon: "fas fa-save",
                         on_click: move |_| {
@@ -53,19 +87,20 @@ pub fn PresetView(cx: Scope, id: usize) -> Element {
                                             label: label.get().clone(),
                                             messages: messages.read().clone(),
                                             card_colour: colour.get().to_string(),
+                                            device_index: current_port.get().clone(),
                                         },
                                     ),
                             );
                         }
                     }
                     Button {
-                        styling: "flex-1 p-2 rounded-r-md rounded-l-none border-r-2 border-y-2 border-l--0",
+                        styling: "flex-1 py-4 rounded-r-md rounded-l-none border-r-2 border-y-2 border-l--0",
                         text: "Test Messages",
                         icon: "fas fa-paper-plane",
-                        on_click: move |_| { send_midi_messages(data.get().device_index, messages.read().clone()) }
+                        on_click: move |_| { send_midi_messages(*current_port.get(), messages.read().clone()) }
                     }
                     Button {
-                        styling: "flex p-2 rounded-lg border-2 ml-2",
+                        styling: "flex py-4 rounded-lg border-2 ml-2",
                         text: "Delete Preset",
                         icon: "fas fa-trash",
                         on_click: move |_| {
@@ -135,9 +170,12 @@ fn ColourSelector<'a>(
         "pink", "rose",
     ];
     cx.render(rsx!(
-        div { class: "flex-1",
+        div { class: "flex",
+            div { class: "relative",
+                span { class: "absolute pl-2", Badge { text: "Colour".to_string() } }
+            }
             select {
-                class: "flex rounded-md border-2 px-5 py-2",
+                class: "flex rounded-md border-2 p-2 mt-4",
                 onchange: move |e| on_change.call(e.value.to_string()),
                 for colour in tailwind_colours.into_iter() {
                     option { selected: current.get() == &colour.to_string(), colour.to_string() }
@@ -244,15 +282,13 @@ fn PresetLabel<'a>(
     value: &'a UseState<String>,
     on_change: EventHandler<'a, String>,
 ) -> Element {
-    cx.render(rsx!(
-        input {
-            class: "flex-auto border-2 text-sm rounded-md p-2 mr-2",
-            r#type: "text",
-            placeholder: "Preset Label",
-            onchange: move |e| on_change.call(e.value.to_string()),
-            value: "{value}"
-        }
-    ))
+    cx.render(rsx!(input {
+        class: "flex-1 border-2 text-sm rounded-md p-2 mr-2",
+        r#type: "text",
+        placeholder: "Preset Label",
+        onchange: move |e| on_change.call(e.value.to_string()),
+        value: "{value}"
+    }))
 }
 
 #[component]
@@ -400,6 +436,41 @@ fn Badge(cx: Scope, text: String) -> Element {
         }
     ))
 }
+
+struct NumberLabel<T> {
+    label: String,
+    value: T,
+}
+
+#[component]
+fn LabeledNumberView<'a, T>(
+    cx: Scope,
+    values: Vec<NumberLabel<T>>,
+    label: String,
+    current_value: T,
+    on_change: EventHandler<'a, T>,
+) -> Element
+where
+    T: PartialEq + ToString + Clone + Display + FromStr,
+    <T as FromStr>::Err: Debug,
+{
+    cx.render(rsx!(
+        div { class: "flex",
+            div { class: "relative",
+                span { class: "absolute pl-3", Badge { text: label.to_string() } }
+            }
+            select {
+                id: "number-{label}",
+                class: "peer flex-1 rounded-md border-2 min-w-32 px-5 py-2 mx-2 mt-4 md:px-5 text-end align-text-bottom",
+                onchange: move |e| on_change.call(e.value.parse::<T>().unwrap()),
+                for nr in values.into_iter() {
+                    option { selected: current_value == &nr.value, label: "{nr.label}", value: "{nr.value}" }
+                }
+            }
+        }
+    ))
+}
+
 #[component]
 fn NumberView<'a>(
     cx: Scope,

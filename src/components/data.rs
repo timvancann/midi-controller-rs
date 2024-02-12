@@ -9,15 +9,11 @@ use crate::midi::midi_message::MidiMessage;
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AppData {
     pub presets: Vec<Preset>,
-    pub device_index: usize,
 }
 
 impl Default for AppData {
     fn default() -> Self {
-        AppData {
-            presets: vec![],
-            device_index: 0,
-        }
+        AppData { presets: vec![] }
     }
 }
 
@@ -36,6 +32,7 @@ impl AppData {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Preset {
+    pub device_index: usize,
     pub label: String,
     pub messages: Vec<MidiMessage>,
     pub card_colour: String,
@@ -47,6 +44,7 @@ impl Default for Preset {
             label: "New Preset".to_string(),
             messages: vec![],
             card_colour: "red".to_string(),
+            device_index: 0,
         }
     }
 }

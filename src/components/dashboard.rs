@@ -54,7 +54,7 @@ pub fn DashboardView(cx: Scope) -> Element {
                         rsx! (
                     div {
                         class: "block max-w-sm p-6 border-2 border-{preset.card_colour}-700 shadow-lg rounded-lg bg-{preset.card_colour}-300 hover:bg-{preset.card_colour}-500 transition duration-200 ease-in-out hover:cursor-pointer",
-                                onclick: move |_| {send_midi_messages(data.get().device_index, preset.messages.clone())},
+                                onclick: move |_| {send_midi_messages(preset.device_index, preset.messages.clone())},
                         h5 { class: "mb-2 text-2xl font-bold text-center tracking-tight text-gray-900",
                             "{preset.label}"
                         }

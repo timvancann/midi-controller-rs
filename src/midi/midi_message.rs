@@ -2,7 +2,7 @@ use std::error::Error;
 use std::fmt::{Display, Formatter};
 use std::thread::sleep;
 
-use midir::{MidiOutput, MidiOutputConnection};
+use midir::{MidiOutput, MidiOutputConnection, MidiOutputPorts};
 use serde::{Deserialize, Serialize};
 
 use crate::midi::control_change::ControlChange;
@@ -53,6 +53,12 @@ impl From<&str> for MidiMessage {
         }
     }
 }
+
+pub fn get_available_ports() -> MidiOutputPorts {
+    let midi_out = MidiOutput::new("My MIDI Output").unwrap();
+    midi_out.ports()
+}
+
 pub fn send_midi_messages(device: usize, midi_messages: Vec<MidiMessage>) {
     for message in midi_messages {
         match message {
